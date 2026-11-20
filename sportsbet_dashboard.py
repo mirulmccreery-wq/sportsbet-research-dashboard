@@ -47,7 +47,7 @@ def upcoming_only(df):
 st.title("⚽ SportsBet Research Dashboard")
 st.caption(f"Last refresh: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-uploaded = st.file_uploader("Upload SportsBet_Research_Log.jsonl", type=["jsonl", "json", "txt"])
+uploaded = st.file_uploader("Upload SportsBet_Research_Log.jsonl (any file type)", type=None)
 
 if uploaded is None:
     st.info("Upload your research log JSONL file to view the dashboard.")
