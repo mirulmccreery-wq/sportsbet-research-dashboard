@@ -5,6 +5,7 @@ from pathlib import Path
 from datetime import datetime
 import plotly.express as px
 import plotly.graph_objects as go
+import io
 
 st.set_page_config(
     page_title="SportsBet Research Dashboard",
@@ -12,22 +13,16 @@ st.set_page_config(
     layout="wide"
 )
 
-LOG_PATH = Path("/workspace/artifacts/logs/SportsBet_Research_Log.jsonl")
-
-@st.cache_data(ttl=30)
-def load_log():
+def load_from_bytes(data: bytes) -> pd.DataFrame:
     records = []
-    if not LOG_PATH.exists():
-        return pd.DataFrame()
-    with open(LOG_PATH, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                records.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
+    for line in data.decode("utf-8", errors="ignore").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
     if not records:
         return pd.DataFrame()
     df = pd.DataFrame(records)
@@ -49,16 +44,22 @@ def upcoming_only(df):
     settled_ids = set(settled_only(df)["event_id"].astype(str))
     return df[~df["event_id"].astype(str).isin(settled_ids)].copy()
 
-df = load_log()
+st.title("⚽ SportsBet Research Dashboard")
+st.caption(f"Last refresh: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+uploaded = st.file_uploader("Upload SportsBet_Research_Log.jsonl", type=["jsonl", "json", "txt"])
+
+if uploaded is None:
+    st.info("Upload your research log JSONL file to view the dashboard.")
+    st.stop()
+
+df = load_from_bytes(uploaded.getvalue())
+if df.empty:
+    st.warning("No valid data found in the uploaded file.")
+    st.stop()
+
 settled = settled_only(df)
 upcoming = upcoming_only(df)
-
-st.title("⚽ SportsBet Research Dashboard")
-st.caption(f"Last refresh: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} · Source: SportsBet_Research_Log.jsonl")
-
-if df.empty:
-    st.warning("No data found in the research log.")
-    st.stop()
 
 # ==================== FILTERS ====================
 st.sidebar.header("Filters")
@@ -173,6 +174,7 @@ with tab3:
     else:
         st.info("No matches match the current filters.")
 
+# ==================== UPCOMING ====================
 st.divider()
 st.subheader("Upcoming / Unsettled Matches")
 if not upcoming.empty:
@@ -182,6 +184,7 @@ if not upcoming.empty:
 else:
     st.info("No upcoming matches in the log.")
 
+# ==================== BY COMPETITION ====================
 if not filtered.empty and "competition" in filtered.columns:
     st.subheader("Hit Rate by Competition")
     by_comp = (
@@ -194,13 +197,3 @@ if not filtered.empty and "competition" in filtered.columns:
     )
     by_comp["1X2 %"] = (by_comp["hit_1x2"] / by_comp["matches"] * 100).round(1)
     st.dataframe(by_comp.sort_values("matches", ascending=False), use_container_width=True, hide_index=True)
-
-st.caption("Dashboard auto-refreshes every 30 seconds while the page is open.")
-st.markdown(
-    """
-    <script>
-    setTimeout(function(){ window.location.reload(); }, 30000);
-    </script>
-    """,
-    unsafe_allow_html=True
-)
